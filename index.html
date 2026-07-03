@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Stock Analyzer">
+<meta name="theme-color" content="#ffffff">
+<title>NSE Stock Analyzer</title>
+<style>
+  :root {
+    --accent: #1a6ef5;
+    --accent-light: #e8f0fe;
+    --accent-text: #1347b0;
+    --success: #0a7c4e;
+    --success-bg: #e6f4ef;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --warning: #92400e;
+    --warning-bg: #fffbeb;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: #f5f7fa; min-height: 100vh; padding-bottom: 40px; }
+
+  .header { background: #fff; border-bottom: 1px solid var(--gray-200); padding: 14px 16px 0; position: sticky; top: 0; z-index: 10; }
+  .header-title { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .header-title .logo { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .header-title .logo svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .header-title h1 { font-size: 17px; font-weight: 600; color: var(--gray-900); }
+  .header-title p { font-size: 12px; color: var(--gray-500); }
+
+  .tabs { display: flex; gap: 0; }
+  .tab { flex: 1; padding: 10px 4px; text-align: center; font-size: 13px; font-weight: 500; color: var(--gray-500); border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; cursor: pointer; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .content { padding: 16px; max-width: 540px; margin: 0 auto; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .card { background: #fff; border-radius: var(--radius); border: 1px solid var(--gray-200); padding: 16px; margin-bottom: 14px; }
+
+  label { display: block; font-size: 12px; font-weight: 500; color: var(--gray-500); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--gray-200); border-radius: 8px; font-size: 15px; font-family: var(--font); background: #fff; color: var(--gray-900); appearance: none; -webkit-appearance: none; outline: none; }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(26,110,245,0.12); }
+  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+  .field { margin-bottom: 12px; }
+  .row { display: grid; gap: 10px; }
+  .row.two { grid-template-columns: 1fr 1fr; }
+
+  .btn-primary { width: 100%; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 16px; font-weight: 600; cursor: pointer; font-family: var(--font); display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { width: 100%; padding: 11px; background: #fff; color: var(--gray-700); border: 1px solid var(--gray-200); border-radius: var(--radius); font-size: 14px; font-weight: 500; cursor: pointer; font-family: var(--font); display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
+  .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-tg { background: #f0f7ff; color: #1347b0; border-color: #c7deff; }
+  .btn-tg.sent { background: var(--success-bg); color: var(--success); border-color: #a7d7c5; }
+  .btn-save { padding: 11px 20px; width: auto; }
+
+  .verdict { display: flex; align-items: center; gap: 9px; padding: 11px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .verdict.bullish, .verdict.hold { background: var(--success-bg); color: var(--success); }
+  .verdict.bearish, .verdict.sell { background: var(--danger-bg); color: var(--danger); }
+  .verdict.neutral { background: var(--warning-bg); color: var(--warning); }
+  .verdict svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+  .result-card { background: #fff; border-radius: var(--radius); border: 1px solid var(--gray-200); padding: 16px; margin-top: 14px; font-size: 14px; line-height: 1.75; color: var(--gray-700); }
+  .result-card.loading { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--gray-400); font-style: italic; padding: 32px; }
+  .result-card.empty { display: flex; align-items: center; justify-content: center; color: var(--gray-400); font-style: italic; padding: 28px 16px; text-align: center; font-size: 13px; }
+  .result-card strong { color: var(--gray-900); }
+  .result-card .section-head { font-size: 13px; font-weight: 600; color: var(--gray-900); display: block; margin-top: 14px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .result-card .bullet { padding-left: 14px; position: relative; display: block; margin: 2px 0; }
+  .result-card .bullet::before { content: '•'; position: absolute; left: 4px; color: var(--gray-400); }
+  .disclaimer { margin-top: 12px; padding: 10px 12px; background: var(--gray-50); border-radius: 6px; font-size: 11px; color: var(--gray-400); line-height: 1.5; border-left: 3px solid var(--gray-200); }
+
+  .spinner { width: 18px; height: 18px; border: 2.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .settings-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 4px 10px; border-radius: 20px; font-weight: 500; }
+  .badge.ok { background: var(--success-bg); color: var(--success); }
+  .badge.missing { background: var(--warning-bg); color: var(--warning); }
+  .info-box { background: var(--accent-light); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--accent-text); line-height: 1.6; margin-top: 14px; }
+  .info-box strong { display: block; margin-bottom: 4px; font-weight: 600; }
+  code { background: var(--gray-100); padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: 'SF Mono', monospace; word-break: break-all; }
+  .divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+    </div>
+    <div>
+      <h1>NSE Analyzer</h1>
+      <p>Stock &amp; F&amp;O analysis · Powered by AI</p>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('stock')">📈 Stock</button>
+    <button class="tab" onclick="switchTab('fno')">⚡ F&amp;O Position</button>
+    <button class="tab" onclick="switchTab('settings')">⚙️ Telegram</button>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- STOCK TAB -->
+  <div id="stock-section" class="section active">
+    <div class="card">
+      <div class="field">
+        <label>NSE symbol</label>
+        <input type="text" id="s-sym" placeholder="e.g. RELIANCE, TCS, HDFCBANK" autocapitalize="characters" autocorrect="off" spellcheck="false" />
+      </div>
+      <div class="row two">
+        <div class="field">
+          <label>Entry price ₹ (optional)</label>
+          <input type="number" id="s-entry" placeholder="e.g. 2450" inputmode="decimal" />
+        </div>
+        <div class="field">
+          <label>Horizon</label>
+          <select id="s-horizon">
+            <option value="intraday">Intraday</option>
+            <option value="swing" selected>Swing (days–weeks)</option>
+            <option value="positional">Positional (months)</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn-primary" id="s-btn" onclick="analyzeStock()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Analyze
+      </button>
+    </div>
+    <div id="s-result"><div class="result-card empty">Enter a symbol above and tap Analyze to get AI analysis with news, technicals, and a price direction view.</div></div>
+    <button class="btn-secondary btn-tg" id="tg-s-btn" style="display:none" onclick="sendToTelegram('s', this.id)">
+      ✈️ Send to Telegram
+    </button>
+  </div>
+
+  <!-- FNO TAB -->
+  <div id="fno-section" class="section">
+    <div class="card">
+      <div class="row two">
+        <div class="field">
+          <label>Underlying symbol</label>
+          <input type="text" id="f-sym" placeholder="e.g. RELIANCE, NIFTY" autocapitalize="characters" autocorrect="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label>Option type</label>
+          <select id="f-type">
+            <option value="CE">Call (CE)</option>
+            <option value="PE">Put (PE)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row two">
+        <div class="field">
+          <label>Strike price ₹</label>
+          <input type="number" id="f-strike" placeholder="e.g. 2500" inputmode="decimal" />
+        </div>
+        <div class="field">
+          <label>Days to expiry</label>
+          <input type="number" id="f-dte" placeholder="e.g. 8" inputmode="numeric" min="0" max="90" />
+        </div>
+      </div>
+      <div class="row two">
+        <div class="field">
+          <label>Expiry type</label>
+          <select id="f-expiry">
+            <option value="weekly">Weekly</option>
+            <option value="monthly" selected>Monthly</option>
+            <option value="far">Far month</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Your buy price ₹</label>
+          <input type="number" id="f-buy" placeholder="e.g. 120" inputmode="decimal" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Current premium ₹ (optional)</label>
+        <input type="number" id="f-curr" placeholder="e.g. 95 — leave blank if unsure" inputmode="decimal" />
+      </div>
+      <button class="btn-primary" id="f-btn" onclick="analyzeFno()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Analyze position
+      </button>
+    </div>
+    <div id="f-result"><div class="result-card empty">Enter your options position above. You'll get a Hold or Sell recommendation with reasoning on theta decay, direction, and exit levels.</div></div>
+    <button class="btn-secondary btn-tg" id="tg-f-btn" style="display:none" onclick="sendToTelegram('f', this.id)">
+      ✈️ Send to Telegram
+    </button>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div id="settings-section" class="section">
+    <div class="card">
+      <div class="settings-row">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:2px">Telegram credentials</div>
+          <div style="font-size:13px;color:var(--gray-500)">Save once per session</div>
+        </div>
+        <span class="badge missing" id="tg-badge">Not set</span>
+      </div>
+      <div class="field">
+        <label>Bot token</label>
+        <input type="password" id="tg-token" placeholder="123456789:ABC-xyz..." autocomplete="off" autocorrect="off" />
+      </div>
+      <div class="field">
+        <label>Chat ID</label>
+        <input type="text" id="tg-chatid" placeholder="e.g. 123456789" autocomplete="off" inputmode="numeric" />
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+        <button class="btn-secondary btn-save" onclick="saveCreds()">Save</button>
+        <button class="btn-secondary btn-save" onclick="testTg()">Send test message</button>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <strong>How to get your bot token and chat ID</strong>
+      1. In Telegram, message <strong>@BotFather</strong> → tap Start → send /newbot → follow the steps<br>
+      2. Copy the token it gives you and paste above<br>
+      3. Open your new bot in Telegram, tap Start, send any message<br>
+      4. Open in browser: <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code><br>
+      5. Find <code>"chat":{"id":12345}</code> — that number is your chat ID
+    </div>
+
+    <hr class="divider">
+
+    <div class="card">
+      <div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">Your Anthropic API key</div>
+      <div style="font-size:13px;color:var(--gray-500);margin-bottom:12px">Required for AI analysis to work in this standalone app. Get yours free at console.anthropic.com (new accounts get free credits).</div>
+      <div class="field">
+        <label>API key</label>
+        <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off" autocorrect="off" />
+      </div>
+      <button class="btn-secondary btn-save" onclick="saveApiKey()">Save API key</button>
+      <div style="font-size:12px;color:var(--gray-400);margin-top:8px">Stored only in your browser's memory for this session. Never sent anywhere except Anthropic's API.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let tgToken = '', tgChatId = '', apiKey = '', lastResult = { s: '', f: '' };
+
+function switchTab(tab) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(tab + '-section').classList.add('active');
+  const idx = ['stock','fno','settings'].indexOf(tab);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+}
+
+function saveCreds() {
+  tgToken = document.getElementById('tg-token').value.trim();
+  tgChatId = document.getElementById('tg-chatid').value.trim();
+  const badge = document.getElementById('tg-badge');
+  if (tgToken && tgChatId) {
+    badge.textContent = 'Connected ✓';
+    badge.className = 'badge ok';
+    alert('Saved! Tap "Send test message" to confirm it works.');
+  } else {
+    badge.textContent = 'Not set';
+    badge.className = 'badge missing';
+    alert('Please enter both the token and chat ID.');
+  }
+}
+
+function saveApiKey() {
+  apiKey = document.getElementById('api-key').value.trim();
+  if (apiKey) alert('API key saved for this session.');
+}
+
+async function testTg() {
+  tgToken = document.getElementById('tg-token').value.trim();
+  tgChatId = document.getElementById('tg-chatid').value.trim();
+  if (!tgToken || !tgChatId) { alert('Enter and save your credentials first.'); return; }
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: tgChatId, text: '✅ *NSE Analyzer* is connected! You will receive your stock and F&O analysis here.', parse_mode: 'Markdown' })
+    });
+    const d = await r.json();
+    if (d.ok) alert('Test message sent! Check your Telegram.');
+    else alert('Failed: ' + (d.description || 'Check your token and chat ID.'));
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function sendToTelegram(tab, btnId) {
+  if (!tgToken || !tgChatId) { alert('Go to the Telegram tab and save your credentials first.'); return; }
+  const text = lastResult[tab];
+  if (!text) { alert('Run an analysis first.'); return; }
+  const btn = document.getElementById(btnId);
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Sending...';
+  try {
+    for (let i = 0; i < text.length; i += 3800) {
+      await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: tgChatId, text: text.slice(i, i + 3800), parse_mode: 'Markdown' })
+      });
+    }
+    btn.innerHTML = '✅ Sent to Telegram';
+    btn.classList.add('sent');
+    setTimeout(() => { btn.innerHTML = '✈️ Send to Telegram'; btn.classList.remove('sent'); btn.disabled = false; }, 3000);
+  } catch(e) { btn.innerHTML = '✈️ Send to Telegram'; btn.disabled = false; alert('Send failed: ' + e.message); }
+}
+
+async function callClaude(system, user) {
+  const key = apiKey || document.getElementById('api-key').value.trim();
+  if (!key) throw new Error('API key not set. Go to the Telegram tab and enter your Anthropic API key.');
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system, messages: [{ role: 'user', content: user }] })
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error?.message || 'API error');
+  return d.content.map(b => b.text || '').join('');
+}
+
+function renderResult(containerId, tgBtnId, tabKey, text) {
+  const container = document.getElementById(containerId);
+  const tgBtn = document.getElementById(tgBtnId);
+  const vm = text.match(/\[\[VERDICT:(BULLISH|BEARISH|NEUTRAL|HOLD|SELL)\]\]/);
+  let verdict = null, clean = text;
+  if (vm) { verdict = vm[1]; clean = text.replace(vm[0], '').trim(); }
+
+  const icons = {
+    BULLISH: '<svg viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+    BEARISH: '<svg viewBox="0 0 24 24"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>',
+    NEUTRAL: '<svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    HOLD: '<svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+    SELL: '<svg viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+  };
+  const labels = {
+    BULLISH: 'Outlook: Bullish — likely moving up',
+    BEARISH: 'Outlook: Bearish — likely moving down',
+    NEUTRAL: 'Outlook: Neutral / mixed signals',
+    HOLD: 'Recommendation: Hold your position',
+    SELL: 'Recommendation: Exit / sell now'
+  };
+
+  let html = '<div class="result-card">';
+  if (verdict) html += `<div class="verdict ${verdict.toLowerCase()}">${icons[verdict]}${labels[verdict]}</div>`;
+
+  const formatted = clean
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^## (.+)$/gm, '<span class="section-head">$1</span>')
+    .replace(/^• (.+)$/gm, '<span class="bullet">$1</span>')
+    .replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+
+  html += formatted;
+  html += '<div class="disclaimer">AI analysis for reference only — not investment advice. Verify before placing any trade. SEBI FY25 study: 91% of F&O traders and ~68% of intraday traders lost money.</div>';
+  html += '</div>';
+  container.innerHTML = html;
+
+  const tgLines = (verdict ? `*${labels[verdict]}*\n\n` : '') + clean.replace(/\*\*(.+?)\*\*/g, '*$1*');
+  lastResult[tabKey] = tgLines;
+  tgBtn.style.display = 'flex';
+}
+
+async function analyzeStock() {
+  const sym = document.getElementById('s-sym').value.trim().toUpperCase();
+  if (!sym) { alert('Please enter a stock symbol.'); return; }
+  const entry = document.getElementById('s-entry').value;
+  const horizon = document.getElementById('s-horizon').value;
+  const btn = document.getElementById('s-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Analyzing...';
+  document.getElementById('s-result').innerHTML = '<div class="result-card loading"><div class="spinner"></div> Fetching AI analysis...</div>';
+  document.getElementById('tg-s-btn').style.display = 'none';
+  try {
+    const sys = `You are a professional Indian equity analyst with deep knowledge of NSE-listed stocks, technical and fundamental analysis. Give honest, structured analysis including both bullish and bearish scenarios and key risks. Never guarantee outcomes.
+
+Always start with exactly one line: [[VERDICT:BULLISH]], [[VERDICT:BEARISH]], or [[VERDICT:NEUTRAL]]
+
+Then use this structure:
+
+## About the company
+2-3 sentences on what it does, sector, market position.
+
+## Why it may be in the news
+Recent themes, catalysts, results, regulatory environment, FII/DII context.
+
+## Technical picture
+• Trend and price structure
+• Key support and resistance levels (approximate ₹ if known)
+• Momentum signals
+
+## Fundamental snapshot
+• Earnings and revenue trajectory
+• Valuation vs peers
+• Key risks
+
+## Price direction view
+Direct view for the requested horizon. What factors favour up vs down, and which side has more weight? Be honest when uncertain.
+
+Under 420 words. Use • for bullet points, ## for headers, **bold** for numbers.`;
+
+    const msg = `Analyze ${sym} for a ${horizon} trade.${entry ? ` Potential entry around ₹${entry}.` : ''} Include directional view, company context, technicals, fundamentals, and key risks.`;
+    const text = await callClaude(sys, msg);
+    renderResult('s-result', 'tg-s-btn', 's', text);
+  } catch(e) {
+    document.getElementById('s-result').innerHTML = `<div class="result-card" style="color:var(--danger)">${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze';
+}
+
+async function analyzeFno() {
+  const sym = document.getElementById('f-sym').value.trim().toUpperCase();
+  const type = document.getElementById('f-type').value;
+  const strike = document.getElementById('f-strike').value;
+  const expiry = document.getElementById('f-expiry').value;
+  const dte = document.getElementById('f-dte').value;
+  const buy = document.getElementById('f-buy').value;
+  const curr = document.getElementById('f-curr').value;
+  if (!sym || !strike || !buy) { alert('Please enter the symbol, strike price, and your buy price.'); return; }
+  const pnl = curr ? ((parseFloat(curr) - parseFloat(buy)) / parseFloat(buy) * 100).toFixed(1) : null;
+  const btn = document.getElementById('f-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Analyzing...';
+  document.getElementById('f-result').innerHTML = '<div class="result-card loading"><div class="spinner"></div> Analyzing your position...</div>';
+  document.getElementById('tg-f-btn').style.display = 'none';
+  try {
+    const sys = `You are a professional NSE F&O trader and options analyst with deep understanding of Greeks — especially theta decay, delta, and IV. Give honest hold/exit recommendations factoring in time decay risk (weekly options lose 30-50% of value in the last 3 days), directional bias, and position management.
+
+Always start with: [[VERDICT:HOLD]] or [[VERDICT:SELL]]
+
+Then:
+
+## Position summary
+Restate clearly: symbol, strike, type, expiry, P&L if given.
+
+## Direction of the underlying
+Likely near-term direction of the underlying — the most critical factor for a long options trade.
+
+## Time decay risk
+How urgently is theta working against this? Is there enough time for the trade to work? Be specific about the risk given days to expiry.
+
+## Hold or exit — reasoning
+Direct recommendation. If hold: exact condition to exit. If exit: why now?
+
+## Risk levels to watch
+• Cut loss if underlying reaches ₹X
+• Book profit if premium hits ₹Y or underlying reaches ₹Z
+• Time stop: exit by [specific guidance] if move hasn't happened
+
+Under 380 words. Use • for bullets, ## for headers, **bold** for key numbers.`;
+
+    const msg = `My options position:
+- Underlying: ${sym}
+- Option: ${strike} ${type}, ${expiry} expiry${dte ? `, ${dte} days to expiry` : ''}
+- Premium paid: ₹${buy}${curr ? `\n- Current premium: ₹${curr}${pnl !== null ? ` (${parseFloat(pnl) >= 0 ? '+' : ''}${pnl}% P&L)` : ''}` : ''}
+
+Should I HOLD or EXIT? Consider theta decay, direction of ${sym}, and time remaining.`;
+
+    const text = await callClaude(sys, msg);
+    renderResult('f-result', 'tg-f-btn', 'f', text);
+  } catch(e) {
+    document.getElementById('f-result').innerHTML = `<div class="result-card" style="color:var(--danger)">${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze position';
+}
+</script>
+</body>
+</html>
