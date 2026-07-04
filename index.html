@@ -202,7 +202,6 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab('stock')">📈 Stock</button>
     <button class="tab" onclick="switchTab('fno')">⚡ F&amp;O Position</button>
-    <button class="tab" onclick="switchTab('trending')">🔥 Trending</button>
     <button class="tab" onclick="switchTab('markets')">🔥 Markets</button>
     <button class="tab" onclick="switchTab('settings')">⚙️ Telegram</button>
   </div>
@@ -413,10 +412,12 @@ window.addEventListener('DOMContentLoaded', loadSavedCreds);
 
 function switchTab(tab) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById(tab + '-section').classList.add('active');
-  const idx = ['stock','fno','trending','settings'].indexOf(tab);
-  document.querySelectorAll('.tab')[idx].classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', (t.getAttribute('onclick') || '').includes("'" + tab + "'"));
+  });
+  const sec = document.getElementById(tab + '-section');
+  if (sec) sec.classList.add('active');
+  if (tab === 'markets' && !marketsLoaded) fetchMarkets();
 }
 
 function saveCreds() {
