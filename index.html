@@ -153,6 +153,25 @@
   .markets-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; gap: 12px; color: var(--gray-400); font-size: 13px; font-style: italic; }
   .markets-error { background: #fee2e2; color: #b91c1c; border-radius: var(--radius); padding: 14px; font-size: 13px; margin-top: 10px; }
   .trending-reason { font-size: 12px; color: var(--gray-500); margin-top: 3px; }
+
+  .price-ranges-card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 14px 16px; margin-top: 12px; }
+  .price-ranges-title { font-size: 12px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .range-row { margin-bottom: 12px; }
+  .range-row:last-child { margin-bottom: 0; }
+  .range-label { font-size: 12px; color: var(--gray-500); margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .range-label span:first-child { font-weight: 500; }
+  .range-bar-wrap { position: relative; height: 6px; background: var(--gray-100); border-radius: 3px; }
+  .range-bar-fill { position: absolute; height: 100%; background: linear-gradient(90deg, #bfdbfe, #3b82f6); border-radius: 3px; }
+  .range-dot { position: absolute; width: 12px; height: 12px; background: #1d4ed8; border: 2px solid #fff; border-radius: 50%; top: -3px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transform: translateX(-50%); }
+  .range-prices { display: flex; justify-content: space-between; font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+  .range-current { font-size: 11px; color: #1d4ed8; font-weight: 600; }
+  .market-closed-badge { display: inline-flex; align-items: center; gap: 5px; background: #fef9c3; color: #854d0e; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 500; }
+  .day-range-row { display: flex; gap: 10px; margin-bottom: 12px; }
+  .day-stat { flex: 1; background: var(--gray-50); border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .day-stat-label { font-size: 11px; color: var(--gray-400); margin-bottom: 2px; }
+  .day-stat-value { font-size: 14px; font-weight: 600; color: var(--gray-900); }
+  .day-stat-value.up { color: #15803d; }
+  .day-stat-value.down { color: #b91c1c; }
   .disclaimer { margin-top: 12px; padding: 10px 12px; background: var(--gray-50); border-radius: 6px; font-size: 11px; color: var(--gray-400); line-height: 1.5; border-left: 3px solid var(--gray-200); }
 
   .spinner { width: 18px; height: 18px; border: 2.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
@@ -598,8 +617,19 @@ List minimum 3 news items, maximum 5. These must be REAL recent news found via s
 Keep each section tight. Always search for real data. Never fabricate news.`;
 
     const msg = `Search the web for latest news and data on ${sym} NSE India stock. Today is ${today}. ${entry ? `Trader is considering entry at ₹${entry}.` : ''} Horizon: ${horizon}. Give me a full analysis with live news, price targets, and a clear BUY/HOLD/SELL recommendation.`;
-    const text = await callClaude(sys, msg);
+    // Run AI analysis and price fetch in parallel
+    const [text, priceData] = await Promise.all([
+      callClaude(sys, msg),
+      fetchPriceRanges(sym)
+    ]);
     renderResult('s-result', 'tg-s-btn', 's', text);
+    // Inject price ranges card right after the verdict box
+    const rangesHtml = renderPriceRanges(priceData, sym, isMarketOpen());
+    if (rangesHtml) {
+      const box = document.getElementById('s-result');
+      const rc = box.querySelector('.result-card');
+      if (rc) rc.insertAdjacentHTML('afterbegin', rangesHtml);
+    }
   } catch(e) {
     document.getElementById('s-result').innerHTML = `<div class="result-card" style="color:var(--danger)">${e.message}</div>`;
   }
@@ -664,17 +694,49 @@ Should I HOLD or EXIT? Consider theta decay, direction of ${sym}, and time remai
   btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze position';
 }
 
+// ── NSE Holiday calendar (YYYY-MM-DD) ─────────────────────
+const NSE_HOLIDAYS = new Set([
+  // 2025
+  '2025-01-26','2025-02-26','2025-03-14','2025-03-31',
+  '2025-04-10','2025-04-14','2025-04-18','2025-05-01',
+  '2025-08-15','2025-08-27','2025-10-02','2025-10-02',
+  '2025-10-24','2025-11-01','2025-11-05','2025-12-25',
+  // 2026
+  '2026-01-26','2026-03-02','2026-03-20','2026-04-02',
+  '2026-04-03','2026-04-14','2026-05-01','2026-07-04',
+  '2026-08-15','2026-10-02','2026-11-14','2026-12-25'
+]);
+
+function isNSEHoliday(ist) {
+  const y = ist.getFullYear();
+  const m = String(ist.getMonth()+1).padStart(2,'0');
+  const d = String(ist.getDate()).padStart(2,'0');
+  return NSE_HOLIDAYS.has(`${y}-${m}-${d}`);
+}
+
+function getISTNow() {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utc + 5.5 * 60 * 60000);
+}
+
+function isMarketOpen() {
+  const ist = getISTNow();
+  const day = ist.getDay();
+  const totalMins = ist.getHours() * 60 + ist.getMinutes();
+  return day >= 1 && day <= 5
+    && !isNSEHoliday(ist)
+    && totalMins >= 9*60+15
+    && totalMins < 15*60+30;
+}
+
 // ── Market status bar ──────────────────────────────────────
 function updateMarketStatus() {
-  const now = new Date();
-  // Convert to IST (UTC+5:30)
-  const istOffset = 5.5 * 60;
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const ist = new Date(utc + istOffset * 60000);
-
-  const day = ist.getDay(); // 0=Sun, 6=Sat
+  const ist = getISTNow();
+  const day = ist.getDay();
   const h = ist.getHours();
   const m = ist.getMinutes();
+  const totalMins = h * 60 + m;
   const timeStr = ist.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = ist.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -684,39 +746,41 @@ function updateMarketStatus() {
 
   timeEl.textContent = `${dateStr} · ${timeStr} IST`;
 
-  const isWeekday = day >= 1 && day <= 5;
-  const totalMins = h * 60 + m;
-  const marketOpen = 9 * 60 + 15;   // 9:15 AM
-  const marketClose = 15 * 60 + 30; // 3:30 PM
-  const preOpen = 9 * 60;           // 9:00 AM pre-open session
-
-  if (isWeekday && totalMins >= marketOpen && totalMins < marketClose) {
+  if (isMarketOpen()) {
     bar.className = 'market-bar market-open';
     statusEl.textContent = 'NSE Market is OPEN';
-  } else {
-    bar.className = 'market-bar market-closed';
-    // Calculate next open
-    let nextOpen = '';
-    if (isWeekday && totalMins < marketOpen) {
-      const minsLeft = marketOpen - totalMins;
-      nextOpen = `Opens in ${Math.floor(minsLeft/60)}h ${minsLeft%60}m (9:15 AM today)`;
-    } else {
-      // Find next weekday
-      let daysAhead = 1;
-      while (true) {
-        const nextDay = (day + daysAhead) % 7;
-        if (nextDay >= 1 && nextDay <= 5) break;
-        daysAhead++;
-      }
-      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-      const nextDay = (day + daysAhead) % 7;
-      nextOpen = `Opens ${days[nextDay]} at 9:15 AM IST`;
-    }
-    statusEl.textContent = `NSE Market CLOSED · ${nextOpen}`;
+    return;
   }
+
+  bar.className = 'market-bar market-closed';
+  const holiday = isNSEHoliday(ist);
+
+  let nextOpen = '';
+  if (!holiday && day >= 1 && day <= 5 && totalMins < 9*60+15) {
+    const minsLeft = (9*60+15) - totalMins;
+    nextOpen = `Opens in ${Math.floor(minsLeft/60)}h ${minsLeft%60}m`;
+  } else {
+    let daysAhead = 1;
+    for (let i = 1; i <= 7; i++) {
+      const candidate = new Date(ist);
+      candidate.setDate(ist.getDate() + i);
+      const nd = candidate.getDay();
+      if (nd >= 1 && nd <= 5 && !isNSEHoliday(candidate)) {
+        daysAhead = i; break;
+      }
+    }
+    const nextDate = new Date(ist);
+    nextDate.setDate(ist.getDate() + daysAhead);
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    nextOpen = `Opens ${days[nextDate.getDay()]} ${nextDate.getDate()} ${nextDate.toLocaleString('en-IN',{month:'short'})} at 9:15 AM`;
+  }
+
+  statusEl.textContent = holiday
+    ? `NSE Holiday today · ${nextOpen}`
+    : `NSE Market CLOSED · ${nextOpen}`;
 }
 updateMarketStatus();
-setInterval(updateMarketStatus, 60000); // update every minute
+setInterval(updateMarketStatus, 60000);
 
 
 // ── Trending / Market Pulse ────────────────────────────────
@@ -864,6 +928,114 @@ function quickAnalyze(sym) {
 }
 
 
+
+// ── Price range fetcher (Yahoo Finance) ───────────────────
+async function fetchPriceRanges(symbol) {
+  const ticker = symbol.endsWith('.NS') ? symbol : symbol + '.NS';
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
+    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error('Yahoo fetch failed');
+    const d = await r.json();
+    const result = d.chart?.result?.[0];
+    if (!result) throw new Error('No data');
+
+    const closes = result.indicators?.quote?.[0]?.close?.filter(v => v != null) || [];
+    const highs   = result.indicators?.quote?.[0]?.high?.filter(v => v != null) || [];
+    const lows    = result.indicators?.quote?.[0]?.low?.filter(v => v != null) || [];
+    const timestamps = result.timestamp || [];
+    const meta = result.meta || {};
+
+    if (closes.length < 5) throw new Error('Insufficient data');
+
+    const fmt = v => v != null ? '₹' + parseFloat(v).toLocaleString('en-IN', {maximumFractionDigits:2}) : 'N/A';
+    const sl  = n => closes.slice(-n);
+    const hl  = (arr, n) => arr.slice(-n);
+
+    const w4  = { high: Math.max(...hl(highs,20)),  low: Math.min(...hl(lows,20)),  cur: closes[closes.length-1] };
+    const w12 = { high: Math.max(...hl(highs,60)),  low: Math.min(...hl(lows,60)),  cur: closes[closes.length-1] };
+    const w52 = { high: Math.max(...hl(highs,252)), low: Math.min(...hl(lows,252)), cur: closes[closes.length-1] };
+
+    const cur  = meta.regularMarketPrice || closes[closes.length-1];
+    const prev = meta.chartPreviousClose || closes[closes.length-2];
+    const chg  = cur - prev;
+    const chgP = ((chg / prev) * 100).toFixed(2);
+
+    // Today's data (last bar)
+    const todayHigh  = highs[highs.length-1];
+    const todayLow   = lows[lows.length-1];
+    const todayOpen  = result.indicators?.quote?.[0]?.open?.[result.indicators.quote[0].open.length-1];
+    const todayVol   = result.indicators?.quote?.[0]?.volume?.[result.indicators.quote[0].volume.length-1];
+
+    return {
+      ok: true,
+      current: cur,
+      change: chg,
+      changePct: chgP,
+      prevClose: prev,
+      w4, w12, w52,
+      today: { high: todayHigh, low: todayLow, open: todayOpen, volume: todayVol },
+      fmt
+    };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function renderPriceRanges(data, symbol, marketOpen) {
+  if (!data.ok) return '';
+  const fmt = data.fmt;
+
+  function rangePct(val, low, high) {
+    if (high === low) return 50;
+    return Math.max(2, Math.min(98, ((val - low) / (high - low)) * 100));
+  }
+
+  function rangeBar(label, range) {
+    const pct = rangePct(range.cur, range.low, range.high);
+    return `<div class="range-row">
+      <div class="range-label">
+        <span>${label}</span>
+        <span class="range-current">Current: ${fmt(range.cur)}</span>
+      </div>
+      <div class="range-bar-wrap">
+        <div class="range-bar-fill" style="left:0;right:0"></div>
+        <div class="range-dot" style="left:${pct}%"></div>
+      </div>
+      <div class="range-prices"><span>${fmt(range.low)}</span><span>${fmt(range.high)}</span></div>
+    </div>`;
+  }
+
+  const chgUp = data.change >= 0;
+  let html = `<div class="price-ranges-card">
+    <div class="price-ranges-title">
+      <span>📊 Price Ranges</span>
+      ${!marketOpen ? '<span class="market-closed-badge">🔴 Market Closed</span>' : ''}
+    </div>`;
+
+  // Day stats (only if market open or today has data)
+  if (data.today?.high && marketOpen) {
+    html += `<div class="day-range-row">
+      <div class="day-stat"><div class="day-stat-label">Open</div><div class="day-stat-value">${fmt(data.today.open)}</div></div>
+      <div class="day-stat"><div class="day-stat-label">Day High</div><div class="day-stat-value up">${fmt(data.today.high)}</div></div>
+      <div class="day-stat"><div class="day-stat-label">Day Low</div><div class="day-stat-value down">${fmt(data.today.low)}</div></div>
+      <div class="day-stat"><div class="day-stat-label">Change</div><div class="day-stat-value ${chgUp?'up':'down'}">${chgUp?'+':''}${data.changePct}%</div></div>
+    </div>`;
+  } else if (!marketOpen) {
+    html += `<div class="day-range-row">
+      <div class="day-stat"><div class="day-stat-label">Prev Close</div><div class="day-stat-value">${fmt(data.prevClose)}</div></div>
+      <div class="day-stat"><div class="day-stat-label">Last Price</div><div class="day-stat-value">${fmt(data.current)}</div></div>
+      <div class="day-stat"><div class="day-stat-label">Prev Change</div><div class="day-stat-value ${chgUp?'up':'down'}">${chgUp?'+':''}${data.changePct}%</div></div>
+    </div>`;
+  }
+
+  html += rangeBar('4-Week Range (20 days)', data.w4);
+  html += rangeBar('12-Week Range (60 days)', data.w12);
+  html += rangeBar('52-Week Range', data.w52);
+  html += '</div>';
+  return html;
+}
+
 // ── Markets Tab ────────────────────────────────────────────
 let marketsLoaded = false;
 
@@ -886,7 +1058,7 @@ async function fetchMarkets() {
     const today = new Date().toLocaleDateString('en-IN', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
     const time = new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12:true});
 
-    const sys = `You are a real-time NSE India market data assistant. Use Google Search to get TODAY's live data. Today is ${today}, time is ${time} IST. Return ONLY a valid JSON object, no markdown, no explanation, no backticks. Just raw JSON.`;
+    const sys = `You are a real-time NSE India market data assistant. Use Google Search to get TODAY's live data. Today is ${today}, time is ${time} IST. CRITICAL: Return ONLY a raw JSON object. No markdown. No backticks. No code fences. No explanation text before or after. The very first character of your response must be { and the very last must be }. Nothing else.`;
 
     const prompt = `Search Google Finance and Yahoo Finance right now for today's NSE India market data. Return this exact JSON structure with real live data:
 {
@@ -944,10 +1116,28 @@ Use REAL live data from Google Search. All prices and changes must be today's ac
 
     if (!rawText) throw new Error('No response from Gemini');
 
-    // Extract JSON from response
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    // Strip markdown code fences Gemini sometimes adds despite instructions
+    let cleaned = rawText
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim();
+
+    // Extract the JSON object
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Could not parse market data. Try refreshing.');
-    const data = JSON.parse(jsonMatch[0]);
+
+    let data;
+    try {
+      data = JSON.parse(jsonMatch[0]);
+    } catch(parseErr) {
+      // Last resort: try to fix common JSON issues (trailing commas)
+      const fixed = jsonMatch[0].replace(/,\s*([}\]])/g, '$1');
+      try {
+        data = JSON.parse(fixed);
+      } catch(e2) {
+        throw new Error('Market data format error — please refresh and try again.');
+      }
+    }
 
     renderMarkets(data);
     marketsLoaded = true;
